@@ -1,0 +1,60 @@
+appId: com.ciboard.app
+productName: CIBoard
+copyright: Copyright © CIBoard
+directories:
+  buildResources: build
+  output: release
+
+# Only the bundles electron-vite produced; node_modules is limited to runtime dependencies
+# (node-pty is the only one the main process needs at run time, the rest is bundled).
+files:
+  - out/**
+  - package.json
+  # node-pty build-time leftovers and binaries for other platforms / architectures
+  - '!node_modules/node-addon-api/**'
+  - '!node_modules/node-pty/{src,deps,scripts,typings}/**'
+  - '!node_modules/node-pty/prebuilds/{darwin-arm64,darwin-x64,win32-arm64}/**'
+  - '!node_modules/node-pty/third_party/conpty/*/win10-arm64/**'
+  - '!**/*.pdb'
+
+# Shell integration scripts are read by shells (bash, pwsh) from the real file system, so they
+# are copied next to the app instead of being packed into the asar archive.
+extraResources:
+  # window / taskbar icon used at run time (the exe's own icon is embedded by the build)
+  - from: build/icon.ico
+    to: icon.ico
+  - from: shell-integration
+    to: shell-integration
+    filter:
+      - '*.ps1'
+      - '*.sh'
+      - '*.md'
+
+# node-pty ships native binaries and helper executables (OpenConsole.exe, conpty.dll, ...):
+# they cannot run from inside an asar archive.
+asarUnpack:
+  - node_modules/node-pty/**
+
+# node-pty ships N-API prebuilds for win32-x64 that work with every Electron version, so there is
+# nothing to compile at packaging time. (`npm run rebuild` is available for machines that have the
+# Visual Studio build tools and want a from-source build.)
+npmRebuild: false
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  artifactName: ${productName}-${version}-${arch}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  shortcutName: CIBoard
+
+portable:
+  artifactName: ${productName}-${version}-${arch}-portable.${ext}

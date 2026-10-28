@@ -1,0 +1,2 @@
+# bash scripts must keep LF line endings or bash fails with ": command not found"
+shell-integration/*.sh text eol=lf
