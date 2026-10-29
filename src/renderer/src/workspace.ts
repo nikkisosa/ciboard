@@ -32,6 +32,8 @@ export interface WorkspaceState {
   /** Every tab (workspace) in order. The active one's tiles here may lag behind `tiles`. */
   tabs: WorkspaceTab[]
   activeTabId: string
+  /** Tabs the person has opened this run. Shells only start for these; none open at launch. */
+  openTabs: string[]
 }
 
 /** Layouts saved before the panel width became a fraction stored pixels (`focusWidth`). */
@@ -68,7 +70,8 @@ class Workspace {
     ui: DEFAULT_UI,
     focusNonce: 0,
     tabs: [],
-    activeTabId: ''
+    activeTabId: '',
+    openTabs: []
   }
   private listeners = new Set<() => void>()
   private sessionToTile = new Map<string, string>()
@@ -119,11 +122,12 @@ class Workspace {
       tiles: activeTab.tiles,
       activeTileId: activeTab.activeTileId,
       ready: true,
-      ui: migrateUi(layout?.ui)
+      ui: migrateUi(layout?.ui),
+      // Nothing starts at launch: a workspace opens when the person picks it. A first run
+      // (no saved layout) opens its one starter terminal so the canvas is not a dead end.
+      openTabs: layout ? [] : [activeTab.id]
     })
-    // Sessions are re-spawned, never reattached, and only for the tab that is showing: the other
-    // tabs start the first time they are opened.
-    this.ensureStarted(activeTab.tiles)
+    if (!layout) this.ensureStarted(activeTab.tiles)
   }
 
   /** Tabs from the layout file; older layouts (one open set plus saved workspaces) are migrated. */
@@ -306,7 +310,13 @@ class Workspace {
       activeTileId: null
     }
     this.set(
-      { tabs: [...this.state.tabs, tab], activeTabId: tab.id, tiles: [], activeTileId: null },
+      {
+        tabs: [...this.state.tabs, tab],
+        activeTabId: tab.id,
+        tiles: [],
+        activeTileId: null,
+        openTabs: [...this.state.openTabs, tab.id]
+      },
       true
     )
   }
@@ -319,12 +329,28 @@ class Workspace {
 
   /** Show another tab. Its shells kept running while it was hidden; unstarted ones start now. */
   switchTab(id: string): void {
-    if (id === this.state.activeTabId) return
+    if (id === this.state.activeTabId) {
+      this.openTab(id)
+      return
+    }
     this.syncActiveTab()
     const tab = this.state.tabs.find((t) => t.id === id)
     if (!tab) return
     this.set({ activeTabId: id, tiles: tab.tiles, activeTileId: tab.activeTileId }, true)
-    this.ensureStarted(tab.tiles)
+    this.openTab(id)
+  }
+
+  isTabOpen(id: string): boolean {
+    return this.state.openTabs.includes(id)
+  }
+
+  /** Open a workspace: start its shells. Several can be open at once; they keep running. */
+  openTab(id: string): void {
+    if (this.state.openTabs.includes(id)) return
+    const tab = this.state.tabs.find((t) => t.id === id)
+    if (!tab) return
+    this.set({ openTabs: [...this.state.openTabs, id] })
+    this.ensureStarted(id === this.state.activeTabId ? this.state.tiles : tab.tiles)
   }
 
   /** Previous / next tab (wraps), e.g. Ctrl+PageUp / Ctrl+PageDown. */
@@ -369,10 +395,11 @@ class Workspace {
       delete runtime[t.id]
     }
     const tabs = this.state.tabs.filter((t) => t.id !== id)
+    const openTabs = this.state.openTabs.filter((t) => t !== id)
     const gone = new Set(tab.tiles.map((t) => t.id))
     const broadcast = this.state.broadcast.filter((i) => !gone.has(i))
     if (id !== this.state.activeTabId) {
-      this.set({ tabs, runtime, broadcast }, true)
+      this.set({ tabs, runtime, broadcast, openTabs }, true)
       return
     }
     const next = tabs[Math.min(idx, tabs.length - 1)]
@@ -381,13 +408,13 @@ class Workspace {
         tabs,
         runtime,
         broadcast,
+        openTabs,
         activeTabId: next.id,
         tiles: next.tiles,
         activeTileId: next.activeTileId
       },
       true
     )
-    this.ensureStarted(next.tiles)
   }
 
   /** Move the active tile through the tile list (wraps), e.g. Ctrl+Tab. */
@@ -464,15 +491,31 @@ class Workspace {
     if (this.state.activeTileId !== tileId) this.set({ activeTileId: tileId }, true)
   }
 
-  setGeometry(items: readonly { i: string; x: number; y: number; w: number; h: number }[]): void {
-    let changed = false
-    const tiles = this.state.tiles.map((t) => {
-      const g = items.find((i) => i.i === t.id)
-      if (!g || (g.x === t.x && g.y === t.y && g.w === t.w && g.h === t.h)) return t
-      changed = true
-      return { ...t, x: g.x, y: g.y, w: g.w, h: g.h }
+  /**
+   * Take the canvas layout after a drag or resize: the new order is the reading order of the
+   * dropped positions, and a size is stored only when the person changed it (`shownW` is what
+   * the tile was drawn at, which may be wider than its stored width on a narrow window).
+   */
+  applyLayout(
+    items: readonly { i: string; x: number; y: number; w: number; h: number }[],
+    shownW: Record<string, number>
+  ): void {
+    const byId = new Map(items.map((i) => [i.i, i]))
+    const ordered = [...this.state.tiles].sort((a, b) => {
+      const ga = byId.get(a.id)
+      const gb = byId.get(b.id)
+      return ga && gb ? ga.y - gb.y || ga.x - gb.x : 0
     })
-    if (changed) this.set({ tiles }, true)
+    const tiles = ordered.map((t) => {
+      const g = byId.get(t.id)
+      if (!g) return t
+      return { ...t, w: g.w !== shownW[t.id] ? g.w : t.w, h: g.h, x: g.x, y: g.y }
+    })
+    const same = tiles.every((t, i) => {
+      const o = this.state.tiles[i]
+      return o.id === t.id && o.w === t.w && o.h === t.h
+    })
+    if (!same) this.set({ tiles }, true)
   }
 
   /** Default "run as administrator" for a profile (shown as the shield toggle in the picker). */

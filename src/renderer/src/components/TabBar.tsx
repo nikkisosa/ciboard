@@ -35,7 +35,7 @@ export function TabBar({ ws }: { ws: WorkspaceState }): React.JSX.Element {
             key={tab.id}
             role="tab"
             aria-selected={active}
-            className={`tab${active ? ' on' : ''}${critical ? ' critical' : ''}${drop ? ' drop' : ''}`}
+            className={`tab${active ? ' on' : ''}${critical ? ' critical' : ''}${drop ? ' drop' : ''}${ws.openTabs.includes(tab.id) ? '' : ' closed'}`}
             draggable={renamingId !== tab.id}
             onDragStart={() => setDragId(tab.id)}
             onDragOver={(e) => {
@@ -59,7 +59,9 @@ export function TabBar({ ws }: { ws: WorkspaceState }): React.JSX.Element {
             title={
               critical
                 ? `${critical} terminal(s) past the context limit`
-                : 'Double-click to rename, drag to reorder'
+                : ws.openTabs.includes(tab.id)
+                  ? 'Double-click to rename, drag to reorder'
+                  : 'Not open. Click to open this workspace'
             }
           >
             {renamingId === tab.id ? (

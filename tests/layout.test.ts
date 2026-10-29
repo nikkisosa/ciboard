@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findSlot } from '../src/shared/layout'
+import { findSlot, flowLayout } from '../src/shared/layout'
 
 describe('findSlot', () => {
   it('places the first tile at the origin', () => {
@@ -19,5 +19,29 @@ describe('findSlot', () => {
     expect(findSlot([{ x: 4, y: 0, w: 4, h: 8 }], 8, 4)).toEqual({ x: 8, y: 0, w: 8, h: 4 })
     // In a narrow grid there is no room beside it, so it drops below.
     expect(findSlot([{ x: 4, y: 0, w: 4, h: 8 }], 8, 4, 12).y).toBe(8)
+  })
+})
+
+describe('flowLayout', () => {
+  const tile = (id: string, w = 8, h = 9): { id: string; w: number; h: number } => ({ id, w, h })
+
+  it('wraps tiles like inline-block elements', () => {
+    const out = flowLayout([tile('a'), tile('b'), tile('c'), tile('d')])
+    expect([out.a, out.b, out.c, out.d].map((r) => [r.x, r.y])).toEqual([
+      [0, 0],
+      [8, 0],
+      [16, 0],
+      [0, 9]
+    ])
+  })
+
+  it('closes gaps: removing a tile pulls the rest back in order', () => {
+    const out = flowLayout([tile('a'), tile('c'), tile('d')])
+    expect([out.c.x, out.c.y, out.d.x, out.d.y]).toEqual([8, 0, 16, 0])
+  })
+
+  it('starts the next row below the tallest tile', () => {
+    const out = flowLayout([tile('a', 12, 5), tile('b', 12, 12), tile('c', 12, 4)])
+    expect(out.c.y).toBe(12)
   })
 })
