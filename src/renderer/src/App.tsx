@@ -6,6 +6,7 @@ import { TabBar } from './components/TabBar'
 import { ProfilePicker } from './components/ProfilePicker'
 import { SettingsDialog } from './components/SettingsDialog'
 import { StatusBar } from './components/StatusBar'
+import { WorkflowDialog } from './components/WorkflowDialog'
 import { initContextMonitor } from './contextMonitor'
 import { initMonitor, resetMonitor } from './monitorStore'
 import { Splitter } from './components/Splitter'
@@ -27,6 +28,7 @@ export function App(): React.JSX.Element {
   const ws = useWorkspace()
   const settings = useSettings()
   const [picker, setPicker] = useState(false)
+  const [workflowOpen, setWorkflowOpen] = useState(false)
   const [settingsInfo, setSettingsInfo] = useState<AppInfo | null>(null)
   const dragStart = useRef({ focusWidth: 0, historyHeight: 0 })
 
@@ -143,6 +145,13 @@ export function App(): React.JSX.Element {
                 «
               </button>
             )}
+            <button
+              className="icon-btn"
+              title="Workflows: send steps from docs/knowledge to the active terminal"
+              onClick={() => setWorkflowOpen(true)}
+            >
+              ⛓
+            </button>
             <button className="icon-btn" title="Settings (Ctrl+,)" onClick={openSettings}>
               ⚙
             </button>
@@ -203,6 +212,7 @@ export function App(): React.JSX.Element {
           onClose={() => setSettingsInfo(null)}
         />
       )}
+      {workflowOpen && <WorkflowDialog ws={ws} onClose={() => setWorkflowOpen(false)} />}
       {picker && <ProfilePicker profiles={ws.profiles} onClose={() => setPicker(false)} />}
     </div>
   )

@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE } from '@shared/defaults'
+import { AGENTS } from '@shared/agents'
 import { DEFAULT_REDACTION_PATTERNS, validatePattern } from '@shared/redaction'
 import type { AdminMode, AppInfo, Settings, ThemeSetting } from '@shared/types'
 import { updateSettings } from '../settingsStore'
 import { AUTO_SCHEME, SCHEMES } from '../themes'
 
-type Section = 'appearance' | 'alerts' | 'history' | 'privacy' | 'admin'
+type Section = 'appearance' | 'agents' | 'alerts' | 'history' | 'privacy' | 'admin'
 
 const SECTIONS: { id: Section; label: string }[] = [
   { id: 'appearance', label: 'Appearance' },
+  { id: 'agents', label: 'Agents' },
   { id: 'alerts', label: 'Alerts' },
   { id: 'history', label: 'History' },
   { id: 'privacy', label: 'Privacy' },
@@ -45,6 +47,7 @@ export function SettingsDialog({ settings, appInfo, onClose }: Props): React.JSX
   const [ctxWindow, setCtxWindow] = useState(String(settings.contextWindow))
   const [patterns, setPatterns] = useState(settings.redactionPatterns.join('\n'))
   const [adminMode, setAdminMode] = useState<AdminMode>(settings.adminMode)
+  const [agentCmds, setAgentCmds] = useState<Record<string, string>>(settings.agentCommands ?? {})
   const [cleared, setCleared] = useState(false)
 
   useEffect(() => {
@@ -101,7 +104,12 @@ export function SettingsDialog({ settings, appInfo, onClose }: Props): React.JSX
       contextAlertPercent: ctxN!,
       contextWindow: ctxWindowN!,
       redactionPatterns: patternList,
-      adminMode
+      adminMode,
+      agentCommands: Object.fromEntries(
+        Object.entries(agentCmds)
+          .map(([k, v]) => [k, v.trim()] as const)
+          .filter(([k, v]) => v && v !== AGENTS[k]?.command)
+      )
     })
     onClose()
   }
@@ -204,6 +212,25 @@ export function SettingsDialog({ settings, appInfo, onClose }: Props): React.JSX
               </>
             )}
 
+            {section === 'agents' && (
+              <>
+                <p className="hint">
+                  The command typed into a terminal to start each agent when a workflow runs with
+                  &quot;Start each agent in its terminal first&quot;. Change it if the program is
+                  installed under another name.
+                </p>
+                {Object.entries(AGENTS).map(([id, a]) => (
+                  <label key={id}>
+                    {a.label} (<code>agent: {id}</code>)
+                    <input
+                      value={agentCmds[id] ?? a.command}
+                      spellCheck={false}
+                      onChange={(e) => setAgentCmds({ ...agentCmds, [id]: e.target.value })}
+                    />
+                  </label>
+                ))}
+              </>
+            )}
             {section === 'alerts' && (
               <>
                 <label className="check">

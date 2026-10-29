@@ -24,6 +24,7 @@ const defaults = (): Settings => ({
   contextAlertPercent: 40,
   contextWindow: 200000,
   shellIntegration: true,
+  agentCommands: {},
   historyOutputLimit: 2000
 })
 

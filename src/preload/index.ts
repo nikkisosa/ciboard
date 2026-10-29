@@ -6,7 +6,8 @@ import type {
   HistoryEntry,
   HistoryRunning,
   ResourceSample,
-  Settings
+  Settings,
+  WorkflowRunState
 } from '../shared/types'
 
 const api: CiBoardApi = {
@@ -53,6 +54,20 @@ const api: CiBoardApi = {
       const h = (_e: unknown, u: Record<string, ContextUsage>): void => cb(u)
       ipcRenderer.on(Push.contextUsage, h)
       return () => ipcRenderer.removeListener(Push.contextUsage, h)
+    }
+  },
+  workflow: {
+    list: (root) => ipcRenderer.invoke(Invoke.workflowList, root),
+    run: (root, req) => ipcRenderer.invoke(Invoke.workflowRun, root, req),
+    stop: (runId) => ipcRenderer.send(Invoke.workflowStop, runId),
+    decide: (runId, go, reason) => ipcRenderer.invoke(Invoke.workflowDecide, runId, go, reason),
+    builtin: (root) => ipcRenderer.invoke(Invoke.workflowBuiltin, root),
+    install: (root, names) => ipcRenderer.invoke(Invoke.workflowInstall, root, names),
+    skills: (root) => ipcRenderer.invoke(Invoke.workflowSkills, root),
+    onState: (cb) => {
+      const h = (_e: unknown, s: WorkflowRunState): void => cb(s)
+      ipcRenderer.on(Push.workflowState, h)
+      return () => ipcRenderer.removeListener(Push.workflowState, h)
     }
   },
   clipboard: {

@@ -84,6 +84,8 @@ export interface Settings {
   contextWindow: number
   /** Inject OSC 133 shell integration so history is stored as command -> output entries. */
   shellIntegration: boolean
+  /** Start command per agent, overriding the default (e.g. `{ "codex": "codex.cmd" }`). */
+  agentCommands: Record<string, string>
   /** Max output lines kept per command in the .md file (full output stays in .raw.txt). */
   historyOutputLimit: number
 }
@@ -213,4 +215,83 @@ export interface ResourceSample {
   app: { cpu: number; mem: number }
   /** Per terminal session id. Empty while the process sampler is not available. */
   sessions: Record<string, SessionUsage>
+}
+
+/** One step of a workflow file (`docs/knowledge/*.md`). */
+export interface WorkflowStep {
+  /** 1-based position in the file. */
+  index: number
+  title: string
+  /** Lower-case agent name from the `agent:` line (claude when the line is missing). */
+  agent: string
+  /** Skill named by a `skill:` line; the step tells the agent to use it. */
+  skill?: string
+  /** Pause after this step for a go / no-go decision (`gate: yes`). */
+  gate?: boolean
+  prompt: string
+}
+
+/** A skill found on this machine (local, project, plugin or synced from the cloud account). */
+export interface InstalledSkill {
+  name: string
+  description: string
+  source: 'user' | 'project' | 'plugin'
+  /** Folder of the skill. */
+  dir: string
+}
+
+/** A workflow that ships with CIBoard and can be copied into a project's docs/knowledge. */
+export interface BuiltinWorkflow {
+  name: string
+  title: string
+  steps: number
+  /** The project already has a file with this name. */
+  installed: boolean
+}
+
+export interface WorkflowFile {
+  /** Absolute path. */
+  file: string
+  /** File name without the extension. */
+  name: string
+  steps: WorkflowStep[]
+}
+
+export type WorkflowStepStatus = 'pending' | 'running' | 'waiting' | 'done' | 'failed' | 'skipped'
+
+/** A person's go / no-go on a gated step, with the reason. */
+export interface WorkflowDecision {
+  index: number
+  title: string
+  go: boolean
+  reason: string
+  at: string
+}
+
+export interface WorkflowRunState {
+  runId: string
+  file: string
+  /** Terminal session each agent's steps go to. */
+  targets: Record<string, string>
+  state: 'running' | 'done' | 'stopped' | 'failed'
+  steps: {
+    index: number
+    title: string
+    agent: string
+    skill?: string
+    gate?: boolean
+    status: WorkflowStepStatus
+  }[]
+  decisions: WorkflowDecision[]
+  message?: string
+}
+
+export interface WorkflowRunRequest {
+  file: string
+  /** Agent name -> terminal session its steps are typed into. */
+  targets: Record<string, string>
+  /** First step to send (1-based); earlier steps are marked skipped. */
+  from?: number
+  /** Start each agent in its terminal first (types its command). */
+  launch?: boolean
 }

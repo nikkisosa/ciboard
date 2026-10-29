@@ -10,7 +10,12 @@ import type {
   Profile,
   Settings,
   SpawnRequest,
-  SpawnResult
+  SpawnResult,
+  BuiltinWorkflow,
+  InstalledSkill,
+  WorkflowFile,
+  WorkflowRunRequest,
+  WorkflowRunState
 } from './types'
 
 /** Renderer -> main channels. */
@@ -39,7 +44,14 @@ export const Invoke = {
   historyEntries: 'history:entries',
   historySearch: 'history:search',
   historyOpen: 'history:open',
-  historyOpenFolder: 'history:openFolder'
+  historyOpenFolder: 'history:openFolder',
+  workflowList: 'workflow:list',
+  workflowRun: 'workflow:run',
+  workflowStop: 'workflow:stop',
+  workflowSkills: 'workflow:skills',
+  workflowDecide: 'workflow:decide',
+  workflowBuiltin: 'workflow:builtin',
+  workflowInstall: 'workflow:install'
 } as const
 
 /** Main -> renderer push channels. */
@@ -53,7 +65,8 @@ export const Push = {
   settingsChanged: 'settings:changed',
   monitorSample: 'monitor:sample',
   contextUsage: 'context:usage',
-  openSettings: 'app:openSettings'
+  openSettings: 'app:openSettings',
+  workflowState: 'workflow:state'
 } as const
 
 export interface CiBoardApi {
@@ -89,6 +102,22 @@ export interface CiBoardApi {
   context: {
     /** Context usage of the Claude Code session in each terminal (by terminal session id). */
     onUsage(cb: (usage: Record<string, ContextUsage>) => void): () => void
+  }
+  workflow: {
+    /** Workflow files in `<root>/docs/knowledge` (the folder is created when missing). */
+    list(root: string): Promise<WorkflowFile[]>
+    /** Send the steps of a file to a terminal in order; progress arrives through `onState`. */
+    run(root: string, req: WorkflowRunRequest): Promise<string>
+    stop(runId: string): void
+    /** Workflows built into CIBoard, marked when the project already has them. */
+    builtin(root: string): Promise<BuiltinWorkflow[]>
+    /** Copy built-in workflows into `<root>/docs/knowledge` (never overwrites). */
+    install(root: string, names: string[]): Promise<string[]>
+    /** Answer the go / no-go box. A no-go needs a reason and ends the run. */
+    decide(runId: string, go: boolean, reason: string): Promise<void>
+    /** Skills installed here (user, project, plugins, synced from the account). */
+    skills(root: string): Promise<InstalledSkill[]>
+    onState(cb: (s: WorkflowRunState) => void): () => void
   }
   clipboard: {
     readText(): Promise<string>

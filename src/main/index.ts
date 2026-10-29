@@ -1,9 +1,16 @@
 import { existsSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeTheme, shell } from 'electron'
+import { AGENTS } from '../shared/agents'
 import { Invoke, Push } from '../shared/ipc'
-import type { AdminMode, LayoutFile, Settings, SpawnRequest } from '../shared/types'
+import type {
+  AdminMode,
+  LayoutFile,
+  Settings,
+  SpawnRequest,
+  WorkflowRunRequest
+} from '../shared/types'
 import {
   isAppElevated,
   planElevation,
@@ -29,6 +36,10 @@ import { PtyManager } from './ptyManager'
 import { getProfile, listProfiles } from './profiles'
 import { getSettings, setSettings } from './settings'
 import { dataDir, readJson, writeJson } from './store'
+import { decisionLine, decisionLogPath, listWorkflows, readWorkflow } from './workflow/files'
+import { WorkflowRunner } from './workflow/runner'
+import { installBuiltin, listBuiltin } from './workflow/builtin'
+import { listInstalledSkills } from './workflow/skills'
 
 let win: BrowserWindow | null = null
 
@@ -41,13 +52,23 @@ const history = new HistoryManager({
   cwd: (sessionId, cwd) => send(Push.sessionCwd, { sessionId, cwd })
 })
 
+const workflows = new WorkflowRunner({
+  write: (id, data) => ptys.write(id, data),
+  emit: (state) => send(Push.workflowState, state),
+  command: (agent) => cachedAgentCommands[agent] || AGENTS[agent]?.command || agent,
+  record: (file, d) =>
+    void appendFile(decisionLogPath(file), decisionLine(d), 'utf8').catch(() => {})
+})
+
 const ptys = new PtyManager({
   data: (id, data) => {
     history.output(id, data)
+    workflows.feed(id)
     win?.webContents.send(Push.ptyData, id, data)
   },
   exit: (id, code) => {
     void history.end(id, code)
+    workflows.sessionExited(id)
     win?.webContents.send(Push.ptyExit, id, code)
   }
 })
@@ -63,10 +84,12 @@ const contextWatcher = new ContextWatcher({
   emit: (usage) => send(Push.contextUsage, usage)
 })
 let cachedContextWindow = 200000
+let cachedAgentCommands: Record<string, string> = {}
 
 /** Start or stop the Claude context watcher to match the settings. */
 function syncContextWatcher(s: Settings): void {
   cachedContextWindow = s.contextWindow
+  cachedAgentCommands = s.agentCommands
   if (s.contextAlerts) contextWatcher.start()
   else contextWatcher.stop()
 }
@@ -169,6 +192,22 @@ ipcMain.on(Invoke.ptyResize, (_e, id: string, c: number, r: number) => {
   history.resize(id, c, r)
 })
 ipcMain.on(Invoke.ptyKill, (_e, id: string) => ptys.kill(id))
+
+ipcMain.handle(Invoke.workflowList, (_e, root: string) => listWorkflows(root))
+ipcMain.handle(Invoke.workflowRun, async (_e, root: string, req: WorkflowRunRequest) => {
+  const wf = await readWorkflow(root, req.file)
+  if (!wf.steps.length) throw new Error('This file has no steps.')
+  return workflows.start(req, wf.steps)
+})
+ipcMain.handle(Invoke.workflowSkills, (_e, root: string) => listInstalledSkills(root))
+ipcMain.handle(Invoke.workflowDecide, (_e, id: string, go: boolean, reason: string) =>
+  workflows.decide(id, go, String(reason ?? ''))
+)
+ipcMain.handle(Invoke.workflowBuiltin, (_e, root: string) => listBuiltin(root))
+ipcMain.handle(Invoke.workflowInstall, (_e, root: string, names: string[]) =>
+  installBuiltin(root, names)
+)
+ipcMain.on(Invoke.workflowStop, (_e, id: string) => workflows.stop(id))
 
 ipcMain.handle(Invoke.appInfo, async () => ({
   elevated: await isAppElevated(),
