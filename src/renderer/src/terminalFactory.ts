@@ -28,8 +28,14 @@ export function copySelection(term: Terminal): boolean {
  * copies, Ctrl+V / Ctrl+Shift+V / Shift+Insert paste. Returns true when the key was handled.
  */
 export function handleClipboardKey(term: Terminal, e: KeyboardEvent): boolean {
-  if (e.type !== 'keydown' || e.altKey) return false
+  if (e.type !== 'keydown') return false
   const key = e.key.toLowerCase()
+  if (e.altKey && key === 'enter' && !e.ctrlKey && !e.shiftKey) {
+    e.preventDefault() // Alt+Enter is a newline (ESC CR) for CLIs; never a window/menu action
+    term.input('\x1b\r')
+    return true
+  }
+  if (e.altKey) return false
   if (e.ctrlKey && key === 'c' && (e.shiftKey || term.hasSelection())) {
     e.preventDefault()
     copySelection(term)

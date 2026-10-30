@@ -369,7 +369,8 @@ async function buildMenu(): Promise<void> {
           { role: 'quit' }
         ]
       },
-      { role: 'editMenu' },
+      // No Edit menu: its Ctrl+V / Ctrl+C accelerators paste natively on top of the terminal's own
+      // clipboard handling, which doubled every paste.
       {
         // No zoom roles: Ctrl +/-/0 and Ctrl+wheel change the terminal font size instead.
         label: 'View',
